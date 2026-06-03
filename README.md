@@ -1,4 +1,3 @@
-[index.html](https://github.com/user-attachments/files/28529731/index.html)
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -1242,10 +1241,59 @@
     let currentDocumentFolio = null;
     let editingClientId = null;
     let editingProductId = null;
+    let clientInput;
+    let clientDropdown;
 
     // AL CARGAR LA PÁGINA
     window.addEventListener('DOMContentLoaded', () => {
       initDatabase();
+      
+      // Inicializar referencias del DOM
+      clientInput = document.getElementById('doc-client');
+      clientDropdown = document.getElementById('client-autocomplete');
+
+      // Vincular listeners para autocompletado de clientes
+      if (clientInput && clientDropdown) {
+        clientInput.addEventListener('input', (e) => {
+          const val = e.target.value.toLowerCase();
+          const clients = JSON.parse(localStorage.getItem('innovaclean_clients') || '[]');
+          
+          if (!val) {
+            clientDropdown.style.display = 'none';
+            return;
+          }
+
+          const filtered = clients.filter(c => c.name.toLowerCase().includes(val) || c.phone.includes(val));
+          
+          if (filtered.length === 0) {
+            clientDropdown.style.display = 'none';
+            return;
+          }
+
+          clientDropdown.innerHTML = '';
+          filtered.forEach(c => {
+            const item = document.createElement('div');
+            item.className = 'autocomplete-item';
+            item.innerText = `${c.name} - 📱 ${c.phone}`;
+            item.addEventListener('click', () => {
+              clientInput.value = c.name;
+              document.getElementById('doc-phone').value = c.phone;
+              document.getElementById('doc-address').value = c.address;
+              clientDropdown.style.display = 'none';
+            });
+            clientDropdown.appendChild(item);
+          });
+          clientDropdown.style.display = 'block';
+        });
+
+        // Cerrar dropdown al hacer click fuera
+        document.addEventListener('click', (e) => {
+          if (e.target !== clientInput && e.target !== clientDropdown) {
+            clientDropdown.style.display = 'none';
+          }
+        });
+      }
+
       resetGeneratorForm();
       renderClientsList();
       renderProductsList();
@@ -1391,52 +1439,10 @@
       }
     }
 
-    // AUTOCOMPLETADO DE CLIENTE
-    const clientInput = document.getElementById('doc-client');
-    const clientDropdown = document.getElementById('client-autocomplete');
-
-    clientInput.addEventListener('input', (e) => {
-      const val = e.target.value.toLowerCase();
-      const clients = JSON.parse(localStorage.getItem('innovaclean_clients') || '[]');
-      
-      if (!val) {
-        clientDropdown.style.display = 'none';
-        return;
-      }
-
-      const filtered = clients.filter(c => c.name.toLowerCase().includes(val) || c.phone.includes(val));
-      
-      if (filtered.length === 0) {
-        clientDropdown.style.display = 'none';
-        return;
-      }
-
-      clientDropdown.innerHTML = '';
-      filtered.forEach(c => {
-        const item = document.createElement('div');
-        item.className = 'autocomplete-item';
-        item.innerText = `${c.name} - 📱 ${c.phone}`;
-        item.addEventListener('click', () => {
-          clientInput.value = c.name;
-          document.getElementById('doc-phone').value = c.phone;
-          document.getElementById('doc-address').value = c.address;
-          clientDropdown.style.display = 'none';
-        });
-        clientDropdown.appendChild(item);
-      });
-      clientDropdown.style.display = 'block';
-    });
-
-    // Cerrar dropdown al hacer click fuera
-    document.addEventListener('click', (e) => {
-      if (e.target !== clientInput && e.target !== clientDropdown) {
-        clientDropdown.style.display = 'none';
-      }
-    });
-
     // GUARDAR CLIENTE DESDE DOCUMENTO
     function saveClientFromDoc() {
-      const name = clientInput.value.trim();
+      const docClient = document.getElementById('doc-client');
+      const name = docClient ? docClient.value.trim() : '';
       const phone = document.getElementById('doc-phone').value.trim();
       const address = document.getElementById('doc-address').value.trim();
 
@@ -1578,7 +1584,8 @@
 
     // INICIAR GUARDADO DE DOCUMENTO
     function triggerSaveDocument() {
-      const client = clientInput.value.trim();
+      const docClient = document.getElementById('doc-client');
+      const client = docClient ? docClient.value.trim() : '';
       const phone = document.getElementById('doc-phone').value.trim();
       const address = document.getElementById('doc-address').value.trim();
       const rows = document.querySelectorAll('#items-tbody tr');
@@ -1588,20 +1595,18 @@
         return;
       }
 
-      if (rows.length === 0) {
-        showToast("Debe agregar al menos un producto al documento", "error");
-        return;
-      }
-
-      // Validar productos sin nombre o vacíos
-      let invalidProduct = false;
+      // Contar conceptos válidos (con nombre de producto)
+      let validProductCount = 0;
       rows.forEach(tr => {
-        const prodVal = tr.querySelector('.product-input').value.trim();
-        if (!prodVal) invalidProduct = true;
+        const prodInput = tr.querySelector('.product-input');
+        const prodVal = prodInput ? prodInput.value.trim() : '';
+        if (prodVal) {
+          validProductCount++;
+        }
       });
 
-      if (invalidProduct) {
-        showToast("Todos los conceptos agregados deben tener nombre de producto", "error");
+      if (validProductCount === 0) {
+        showToast("Debe agregar al menos un concepto válido al documento", "error");
         return;
       }
 
@@ -1631,7 +1636,8 @@
     // LOGICA CENTRAL DE GUARDAR DOCUMENTO
     function saveDocument(updateExisting) {
       const type = document.querySelector('input[name="doc-type"]:checked').value;
-      const client = clientInput.value.trim();
+      const docClient = document.getElementById('doc-client');
+      const client = docClient ? docClient.value.trim() : '';
       const phone = document.getElementById('doc-phone').value.trim();
       const address = document.getElementById('doc-address').value.trim();
       const observations = document.getElementById('doc-observations').value.trim();
@@ -1640,17 +1646,20 @@
       const products = [];
       let subtotal = 0;
       document.querySelectorAll('#items-tbody tr').forEach(tr => {
-        const qty = parseFloat(tr.querySelector('.qty-input').value) || 0;
-        const prod = tr.querySelector('.product-input').value.trim();
-        const price = parseFloat(tr.querySelector('.price-input').value) || 0;
-        const imp = qty * price;
-        subtotal += imp;
-        products.push({
-          cantidad: qty,
-          producto: prod,
-          precioUnitario: price,
-          importe: imp
-        });
+        const prodInput = tr.querySelector('.product-input');
+        const prod = prodInput ? prodInput.value.trim() : '';
+        if (prod) {
+          const qty = parseFloat(tr.querySelector('.qty-input').value) || 0;
+          const price = parseFloat(tr.querySelector('.price-input').value) || 0;
+          const imp = qty * price;
+          subtotal += imp;
+          products.push({
+            cantidad: qty,
+            producto: prod,
+            precioUnitario: price,
+            importe: imp
+          });
+        }
       });
 
       const total = Math.max(0, subtotal - discount);
@@ -1662,7 +1671,7 @@
 
       if (updateExisting && currentDocumentId !== null) {
         // Encontrar índice existente
-        const index = docs.findIndex(d => d.id === currentDocumentId);
+        const index = docs.findIndex(d => d.id == currentDocumentId);
         if (index === -1) {
           showToast("No se encontró el documento original para actualizar", "error");
           return;
@@ -1671,8 +1680,6 @@
         finalId = currentDocumentId;
         finalFolio = currentDocumentFolio;
         
-        // Conservamos fecha anterior o ponemos la actual. De acuerdo a la especificación de "fecha y hora automática",
-        // podemos actualizar con la fecha actual del guardado.
         const now = new Date();
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -1739,7 +1746,8 @@
     function exitEditMode() {
       currentDocumentId = null;
       currentDocumentFolio = null;
-      document.getElementById('edit-indicator').style.display = 'none';
+      const editIndicator = document.getElementById('edit-indicator');
+      if (editIndicator) editIndicator.style.display = 'none';
     }
 
     // LIMPIAR GENERADOR
@@ -1752,14 +1760,17 @@
 
     function resetGeneratorForm() {
       // Inputs de texto
-      clientInput.value = '';
+      const docClient = document.getElementById('doc-client');
+      if (docClient) docClient.value = '';
+      
       document.getElementById('doc-phone').value = '';
       document.getElementById('doc-address').value = '';
       document.getElementById('doc-observations').value = '';
       document.getElementById('input-discount').value = '0';
 
       // Tipo por defecto (Cotización)
-      document.querySelector('input[name="doc-type"][value="Cotización"]').checked = true;
+      const typeRadio = document.querySelector('input[name="doc-type"][value="Cotización"]');
+      if (typeRadio) typeRadio.checked = true;
       updateDocTypeUI();
 
       // Limpiar conceptos
@@ -1778,7 +1789,8 @@
     // INTEGRACIÓN CON WHATSAPP
     function sendWhatsApp() {
       const type = document.querySelector('input[name="doc-type"]:checked').value;
-      const client = clientInput.value.trim();
+      const docClient = document.getElementById('doc-client');
+      const client = docClient ? docClient.value.trim() : '';
       const phone = document.getElementById('doc-phone').value.trim();
       const address = document.getElementById('doc-address').value.trim();
       const observations = document.getElementById('doc-observations').value.trim();
@@ -1801,12 +1813,12 @@
       const itemsText = [];
       
       document.querySelectorAll('#items-tbody tr').forEach(tr => {
-        const qty = parseFloat(tr.querySelector('.qty-input').value) || 0;
-        const prod = tr.querySelector('.product-input').value.trim();
-        const price = parseFloat(tr.querySelector('.price-input').value) || 0;
-        const imp = qty * price;
-        
+        const prodInput = tr.querySelector('.product-input');
+        const prod = prodInput ? prodInput.value.trim() : '';
         if (prod) {
+          const qty = parseFloat(tr.querySelector('.qty-input').value) || 0;
+          const price = parseFloat(tr.querySelector('.price-input').value) || 0;
+          const imp = qty * price;
           subtotal += imp;
           itemsText.push(`${qty} x ${prod} = $${imp.toFixed(2)}`);
         }
@@ -1852,7 +1864,8 @@
     // IMPRESIÓN DESDE EL GENERADOR
     function printDocFromGen() {
       const type = document.querySelector('input[name="doc-type"]:checked').value;
-      const client = clientInput.value.trim();
+      const docClient = document.getElementById('doc-client');
+      const client = docClient ? docClient.value.trim() : '';
       const phone = document.getElementById('doc-phone').value.trim();
       const address = document.getElementById('doc-address').value.trim();
       const observations = document.getElementById('doc-observations').value.trim();
@@ -1868,12 +1881,12 @@
       const products = [];
       let subtotal = 0;
       document.querySelectorAll('#items-tbody tr').forEach(tr => {
-        const qty = parseFloat(tr.querySelector('.qty-input').value) || 0;
-        const prod = tr.querySelector('.product-input').value.trim();
-        const price = parseFloat(tr.querySelector('.price-input').value) || 0;
-        const imp = qty * price;
-        
+        const prodInput = tr.querySelector('.product-input');
+        const prod = prodInput ? prodInput.value.trim() : '';
         if (prod) {
+          const qty = parseFloat(tr.querySelector('.qty-input').value) || 0;
+          const price = parseFloat(tr.querySelector('.price-input').value) || 0;
+          const imp = qty * price;
           subtotal += imp;
           products.push({
             cantidad: qty,
@@ -1895,7 +1908,7 @@
         tipo: type,
         fecha: date,
         cliente: { name: client, phone, address },
-        observaciones,
+        observations: observations,
         productos: products,
         descuento: discount,
         total: total
@@ -1975,7 +1988,7 @@
                 </div>
                 <div class="p-total-row">
                   <span>Descuento:</span>
-                  <span>-$$${doc.descuento.toFixed(2)}</span>
+                  <span>-$${doc.descuento.toFixed(2)}</span>
                 </div>
                 <div class="p-total-row grand-total">
                   <span>Total:</span>
@@ -2082,9 +2095,9 @@
 
       if (id) {
         // EDITAR CLIENTE EXISTENTE
-        const index = clients.findIndex(c => c.id === parseInt(id));
+        const index = clients.findIndex(c => c.id == id);
         if (index !== -1) {
-          clients[index] = { id: parseInt(id), name, phone, address };
+          clients[index] = { id: clients[index].id, name, phone, address };
           showToast("Cliente actualizado en el catálogo");
         }
       } else {
@@ -2136,8 +2149,8 @@
             <div class="item-subtitle">📱 ${c.phone} | 📍 ${c.address}</div>
           </div>
           <div class="item-actions">
-            <button class="btn-action-edit" title="Editar" onclick="editClient(${c.id})">✏️</button>
-            <button class="btn-action-delete" title="Eliminar" onclick="deleteClient(${c.id})">🗑️</button>
+            <button class="btn-action-edit" title="Editar" onclick="editClient('${c.id}')">✏️</button>
+            <button class="btn-action-delete" title="Eliminar" onclick="deleteClient('${c.id}')">🗑️</button>
           </div>
         `;
         listContainer.appendChild(row);
@@ -2146,7 +2159,7 @@
 
     function editClient(id) {
       const clients = JSON.parse(localStorage.getItem('innovaclean_clients') || '[]');
-      const c = clients.find(item => item.id === id);
+      const c = clients.find(item => item.id == id);
       if (!c) return;
 
       document.getElementById('client-editing-id').value = c.id;
@@ -2161,7 +2174,7 @@
     function deleteClient(id) {
       if (confirm("¿Está seguro de eliminar este cliente? Se quitará de la lista de búsquedas.")) {
         let clients = JSON.parse(localStorage.getItem('innovaclean_clients') || '[]');
-        clients = clients.filter(c => c.id !== id);
+        clients = clients.filter(c => c.id != id);
         localStorage.setItem('innovaclean_clients', JSON.stringify(clients));
         showToast("Cliente eliminado correctamente");
         
@@ -2194,9 +2207,9 @@
 
       if (id) {
         // EDITAR
-        const index = products.findIndex(p => p.id === parseInt(id));
+        const index = products.findIndex(p => p.id == id);
         if (index !== -1) {
-          products[index] = { id: parseInt(id), name, price };
+          products[index] = { id: products[index].id, name, price };
           showToast("Producto actualizado en el catálogo");
         }
       } else {
@@ -2243,8 +2256,8 @@
             <div class="item-subtitle">Precio sugerido: <strong>$${parseFloat(p.price).toFixed(2)}</strong></div>
           </div>
           <div class="item-actions">
-            <button class="btn-action-edit" title="Editar" onclick="editProduct(${p.id})">✏️</button>
-            <button class="btn-action-delete" title="Eliminar" onclick="deleteProduct(${p.id})">🗑️</button>
+            <button class="btn-action-edit" title="Editar" onclick="editProduct('${p.id}')">✏️</button>
+            <button class="btn-action-delete" title="Eliminar" onclick="deleteProduct('${p.id}')">🗑️</button>
           </div>
         `;
         listContainer.appendChild(row);
@@ -2253,7 +2266,7 @@
 
     function editProduct(id) {
       const products = JSON.parse(localStorage.getItem('innovaclean_products') || '[]');
-      const p = products.find(item => item.id === id);
+      const p = products.find(item => item.id == id);
       if (!p) return;
 
       document.getElementById('product-editing-id').value = p.id;
@@ -2267,7 +2280,7 @@
     function deleteProduct(id) {
       if (confirm("¿Está seguro de eliminar este producto del catálogo sugerido?")) {
         let products = JSON.parse(localStorage.getItem('innovaclean_products') || '[]');
-        products = products.filter(p => p.id !== id);
+        products = products.filter(p => p.id != id);
         localStorage.setItem('innovaclean_products', JSON.stringify(products));
         showToast("Producto eliminado del catálogo correctamente");
         
@@ -2301,25 +2314,23 @@
       const docs = JSON.parse(localStorage.getItem('innovaclean_documents') || '[]');
       const filterClient = document.getElementById('filter-hist-client').value.toLowerCase();
       const filterType = document.getElementById('filter-hist-type').value;
-      const filterDate = document.getElementById('filter-hist-date').value; // Formato YYYY-MM-DD
+      const filterDate = document.getElementById('filter-hist-date').value;
       
       const tbody = document.getElementById('history-tbody');
       tbody.innerHTML = '';
 
       // Filtrado
       const filtered = docs.filter(d => {
-        // Filtro Cliente
-        const matchClient = d.cliente.name.toLowerCase().includes(filterClient);
+        const clientName = (d.cliente && d.cliente.name) ? d.cliente.name : '';
+        const matchClient = clientName.toLowerCase().includes(filterClient);
         
-        // Filtro Tipo
         const matchType = filterType === 'todos' || d.tipo === filterType;
         
-        // Filtro Fecha (d.fecha viene como DD/MM/YYYY HH:MM)
         let matchDate = true;
         if (filterDate) {
           const [fYear, fMonth, fDay] = filterDate.split('-');
           const formattedFilterDate = `${fDay}/${fMonth}/${fYear}`;
-          matchDate = d.fecha.startsWith(formattedFilterDate);
+          matchDate = d.fecha && d.fecha.startsWith(formattedFilterDate);
         }
 
         return matchClient && matchType && matchDate;
@@ -2342,16 +2353,16 @@
           <td><span class="badge ${badgeClass}">${d.tipo}</span></td>
           <td style="white-space: nowrap;">${d.fecha}</td>
           <td>
-            <strong>${d.cliente.name}</strong><br>
-            <small style="color: var(--text-light);">📱 ${d.cliente.phone}</small>
+            <strong>${d.cliente ? d.cliente.name : 'Sin Cliente'}</strong><br>
+            <small style="color: var(--text-light);">📱 ${d.cliente ? d.cliente.phone : ''}</small>
           </td>
           <td style="text-align: right; font-weight: 700;">$${d.total.toFixed(2)}</td>
           <td>
             <div style="display:flex; gap: 4px; justify-content: center;">
-              <button class="btn btn-secondary btn-sm" onclick="openDocumentFromHistory(${d.id})" style="min-height:36px; padding:0 8px;" title="Abrir y Editar">📂 Abrir</button>
-              <button class="btn btn-success btn-sm" onclick="sendWhatsAppFromHistory(${d.id})" style="min-height:36px; padding:0 8px;" title="Enviar por WhatsApp">📲</button>
-              <button class="btn btn-secondary btn-sm" onclick="printFromHistory(${d.id})" style="min-height:36px; padding:0 8px;" title="Imprimir">🖨️</button>
-              <button class="btn btn-danger btn-sm" onclick="deleteHistoryDoc(${d.id})" style="min-height:36px; padding:0 8px;" title="Eliminar">🗑️</button>
+              <button class="btn btn-secondary btn-sm" onclick="openDocumentFromHistory('${d.id}')" style="min-height:36px; padding:0 8px;" title="Abrir y Editar">📂 Abrir</button>
+              <button class="btn btn-success btn-sm" onclick="sendWhatsAppFromHistory('${d.id}')" style="min-height:36px; padding:0 8px;" title="Enviar por WhatsApp">📲</button>
+              <button class="btn btn-secondary btn-sm" onclick="printFromHistory('${d.id}')" style="min-height:36px; padding:0 8px;" title="Imprimir">🖨️</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteHistoryDoc('${d.id}')" style="min-height:36px; padding:0 8px;" title="Eliminar">🗑️</button>
             </div>
           </td>
         `;
@@ -2362,7 +2373,7 @@
     // CARGAR UN DOCUMENTO DESDE EL HISTORIAL AL GENERADOR
     function openDocumentFromHistory(id) {
       const docs = JSON.parse(localStorage.getItem('innovaclean_documents') || '[]');
-      const doc = docs.find(d => d.id === id);
+      const doc = docs.find(d => d.id == id);
       
       if (!doc) {
         showToast("No se encontró el documento solicitado", "error");
@@ -2380,14 +2391,17 @@
       // Llenar campos de cabecera
       document.getElementById('doc-folio').value = doc.folio;
       document.getElementById('doc-date').value = doc.fecha;
-      clientInput.value = doc.cliente.name;
-      document.getElementById('doc-phone').value = doc.cliente.phone;
-      document.getElementById('doc-address').value = doc.cliente.address;
+      if (clientInput) clientInput.value = doc.cliente ? doc.cliente.name : '';
+      document.getElementById('doc-phone').value = doc.cliente ? doc.cliente.phone : '';
+      document.getElementById('doc-address').value = doc.cliente ? doc.cliente.address : '';
       document.getElementById('doc-observations').value = doc.observaciones || '';
       document.getElementById('input-discount').value = doc.descuento;
 
       // Seleccionar Tipo de documento
-      document.querySelector(`input[name="doc-type"][value="${doc.tipo}"]`).checked = true;
+      const typeRadio = document.querySelector(`input[name="doc-type"][value="${doc.tipo}"]`);
+      if (typeRadio) {
+        typeRadio.checked = true;
+      }
       updateDocTypeUI();
 
       // Rellenar tabla
@@ -2411,12 +2425,12 @@
         let docs = JSON.parse(localStorage.getItem('innovaclean_documents') || '[]');
         
         // Si eliminamos el documento que actualmente editamos, salimos de modo edición
-        if (currentDocumentId === id) {
+        if (currentDocumentId == id) {
           exitEditMode();
           resetGeneratorForm();
         }
 
-        docs = docs.filter(d => d.id !== id);
+        docs = docs.filter(d => d.id != id);
         localStorage.setItem('innovaclean_documents', JSON.stringify(docs));
         
         showToast("Documento eliminado del historial");
@@ -2427,7 +2441,7 @@
     // ACCIONES RÁPIDAS DESDE HISTORIAL
     function printFromHistory(id) {
       const docs = JSON.parse(localStorage.getItem('innovaclean_documents') || '[]');
-      const doc = docs.find(d => d.id === id);
+      const doc = docs.find(d => d.id == id);
       if (doc) {
         const format = document.getElementById('print-format').value;
         executePrint(doc, format);
@@ -2436,11 +2450,12 @@
 
     function sendWhatsAppFromHistory(id) {
       const docs = JSON.parse(localStorage.getItem('innovaclean_documents') || '[]');
-      const doc = docs.find(d => d.id === id);
+      const doc = docs.find(d => d.id == id);
       
       if (!doc) return;
 
-      const cleanPhone = doc.cliente.phone.replace(/\D/g, '');
+      const phone = (doc.cliente && doc.cliente.phone) ? doc.cliente.phone : '';
+      const cleanPhone = phone.replace(/\D/g, '');
       if (cleanPhone.length < 10) {
         showToast("El cliente no tiene un número telefónico válido", "error");
         return;
@@ -2449,9 +2464,9 @@
       let msg = `INNOVA CLEAN\n\n`;
       msg += `${doc.tipo.toUpperCase()}\n`;
       msg += `FOLIO #${doc.folio}\n\n`;
-      msg += `Cliente: ${doc.cliente.name}\n`;
-      msg += `Teléfono: ${doc.cliente.phone}\n`;
-      msg += `Dirección: ${doc.cliente.address}\n\n`;
+      msg += `Cliente: ${doc.cliente ? doc.cliente.name : ''}\n`;
+      msg += `Teléfono: ${doc.cliente ? doc.cliente.phone : ''}\n`;
+      msg += `Dirección: ${doc.cliente ? doc.cliente.address : ''}\n\n`;
       msg += `PRODUCTOS\n\n`;
       
       doc.productos.forEach(p => {
